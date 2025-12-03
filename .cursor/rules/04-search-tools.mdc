@@ -1,29 +1,28 @@
 ---
-description: Prefer ast-grep for code-aware searches; rg/grep for text/logs/configs; tool priority: ast-grep → rg → grep.
+description: Force usage of ast-grep for code-aware structure searches.
 globs:
-  - "**/*.{ts,tsx,js,jsx,py,go,rs,java,c,cpp,h,hpp,php,rb,swift,kt,scala,sh,bash,zsh}"
-  - "**/*.{json,yaml,yml,toml,xml,html,css,scss,sass,less}"
-  - "**/*.{md,mdx,txt,log,conf,config,env}"
-  - "**/*"
+  - "**/*.{ts,tsx,js,jsx,py,go,rs,java,c,cpp}"
 alwaysApply: true
 ---
 
-# Search Tools
+# Structural Search Strategy
 
-- Prefer **ast-grep** at `/opt/homebrew/bin/ast-grep` for code-aware searches.
-- Use **rg** (ripgrep) or **grep** for plain text/logs/configs/docs or unsupported file types.
-- Tool priority: **ast-grep → rg → grep**; choose based on file type/context.
+You **MUST** use `ast-grep` (command `sg` or `ast-grep`) when the user asks to find code patterns, class definitions, or complex structural references. Do not use standard regex `grep` for these tasks.
 
-## ast-grep Patterns
+## Execution Protocol
 
-```bash
-ast-grep --pattern 'function $NAME($ARGS) { $$$ }'
-ast-grep --pattern 'class $NAME { $$$ }'
-ast-grep --pattern 'import { $ITEMS } from "$MODULE"'
-ast-grep --pattern 'const $VAR = $VALUE'
-ast-grep --pattern '$OBJ.$METHOD($ARGS)'
-```
+1.  **Verify**: First, verify `ast-grep` is installed by running `ast-grep --version` in the terminal.
+2.  **Execute**: Run the search patterns via the **Terminal** pane.
+3.  **Path**: If `ast-grep` is not in the path, try invoking it explicitly at `/opt/homebrew/bin/ast-grep`.
 
-## Usage
+## Pattern Reference
 
-- This rule auto-attaches for all file types; you can also pull it in manually via **@Cursor Rules** when planning refactors, audits, or symbol lookups.
+Use the following flag combinations:
+
+- Basic: `ast-grep --pattern 'pattern' --json` (Use JSON output for easier parsing)
+- Function: `ast-grep --pattern 'function $NAME($ARGS) { $$$ }'`
+- Class: `ast-grep --pattern 'class $NAME { $$$ }'`
+
+## Fallback
+
+Only if `ast-grep` fails to execute or returns no results, fall back to `ripgrep` (rg).
