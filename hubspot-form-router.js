@@ -319,9 +319,13 @@
 
   /**
    * Determine scheduler type based on form data
-   * Routes to 'success' if multi-practice question answered "no", 'general' if "yes"
+   * All users are routed to scheduler - no disqualification
+   * To re-enable disqualification based on multi-practice question, uncomment the block below
    */
   function determineSchedulerType(formData) {
+    // All users go to scheduler - no disqualification
+    // To re-enable disqualification, uncomment the block below:
+    /*
     // Check multi-practice questions
     const multiPracticeResponse = findFirstValue(
       formData,
@@ -344,6 +348,7 @@
     log('Multi-practice question answered yes, routing to scheduler', {
       multiPracticeValue: multiPracticeResponse,
     });
+    */
     return 'general';
   }
 
