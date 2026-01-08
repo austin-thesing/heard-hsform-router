@@ -277,21 +277,21 @@
           if (response.ok) {
             PARTIAL_FILL_SENT = true;
             log('Partial fill submitted:', { email, formName, pageUrl });
-            console.log('[HubSpot Router] Partial fill sent successfully:', {
+            log('Partial fill sent successfully:', {
               email,
               formName,
               pageUrl,
             });
           } else {
-            console.warn(
-              '[HubSpot Router] Partial fill failed:',
+            log(
+              'Partial fill failed:',
               response.status,
               response.statusText
             );
           }
         })
         .catch((error) => {
-          console.error('[HubSpot Router] Partial fill error:', error);
+          log('Partial fill error:', error);
         });
 
       // Mark as sent immediately to prevent duplicates
@@ -980,7 +980,7 @@
             text.includes('success')
           ) {
             log('Multistep form completion detected via thank you message');
-            console.log('[HubSpot Router] Thank you message found', {
+            log('Thank you message found', {
               selector: selector,
               text: text.substring(0, 100),
               hasRoutingData: hasRoutingData(window._capturedFormData),
@@ -989,11 +989,11 @@
             // Verify we have routing data
             if (hasRoutingData(window._capturedFormData)) {
               log('Triggering redirect from multistep fallback');
-              console.log('[HubSpot Router] Executing redirect via fallback');
+              log('Executing redirect via fallback');
               handleFormSubmission(window._capturedFormData);
             } else {
-              console.warn(
-                '[HubSpot Router] Thank you found but no routing data available'
+              log(
+                'Thank you found but no routing data available'
               );
             }
             return;
@@ -1093,22 +1093,16 @@
             // For multistep forms, set up fallback check after a delay
             // This ensures single-step forms aren't affected (they'll get onFormSubmitted quickly)
             if (!MULTISTEP_FALLBACK_TIMER) {
-              console.log(
-                '[HubSpot Router] Setting up multistep fallback timer'
-              );
+              log('Setting up multistep fallback timer');
               MULTISTEP_FALLBACK_TIMER = setTimeout(() => {
-                console.log(
-                  '[HubSpot Router] Starting multistep completion checks'
-                );
+                log('Starting multistep completion checks');
                 // Check every 500ms for up to 5 seconds after onFormSubmit
                 let checks = 0;
                 const maxChecks = 10;
                 const checkInterval = setInterval(() => {
                   checks++;
                   if (DEBUG || checks === 1 || checks === maxChecks) {
-                    console.log(
-                      `[HubSpot Router] Multistep check ${checks}/${maxChecks}`
-                    );
+                    log(`Multistep check ${checks}/${maxChecks}`);
                   }
                   checkForMultistepCompletion();
 
@@ -1116,8 +1110,8 @@
                     clearInterval(checkInterval);
                     MULTISTEP_FALLBACK_TIMER = null;
                     if (checks >= maxChecks) {
-                      console.warn(
-                        '[HubSpot Router] Multistep fallback checks completed without redirect'
+                      log(
+                        'Multistep fallback checks completed without redirect'
                       );
                     }
                   }
@@ -1190,7 +1184,7 @@
     // Handler for page visibility changes (most reliable)
     function handleVisibilityChange() {
       if (document.visibilityState === 'hidden') {
-        console.log('[HubSpot Router] Visibility changed to hidden', {
+        log('Visibility changed to hidden', {
           HAS_ROUTED,
           PARTIAL_FILL_SENT,
           capturedData: window._capturedFormData,
@@ -1205,12 +1199,10 @@
             submitPartialFill(email, DETECTED_FORM_NAME, pageUrl);
             log('Partial fill triggered on visibility change');
           } else {
-            console.log(
-              '[HubSpot Router] No email captured yet, skipping partial fill'
-            );
+            log('No email captured yet, skipping partial fill');
           }
         } else {
-          console.log('[HubSpot Router] Skipping partial fill:', {
+          log('Skipping partial fill:', {
             reason: HAS_ROUTED
               ? 'Form already routed'
               : 'Partial fill already sent',
@@ -1221,7 +1213,7 @@
 
     // Handler for page hide (backup for browsers that don't support visibilitychange well)
     function handlePageHide() {
-      console.log('[HubSpot Router] Page hide event', {
+      log('Page hide event', {
         HAS_ROUTED,
         PARTIAL_FILL_SENT,
         capturedData: window._capturedFormData,
@@ -1243,7 +1235,6 @@
     window.addEventListener('pagehide', handlePageHide);
 
     log('Partial fill detection initialized');
-    console.log('[HubSpot Router] Partial fill detection initialized');
   }
 
   /**
@@ -1313,9 +1304,7 @@
   };
 
   log('HubSpot Form Router loaded');
-
-  // Always log router load (even without debug mode) for troubleshooting
-  console.log('[HubSpot Router] Script loaded', {
+  log('Script loaded', {
     debug: DEBUG,
     hasRouter: !!window.HubSpotRouter,
     url: window.location.href,
