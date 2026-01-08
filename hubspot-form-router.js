@@ -263,26 +263,39 @@
 
       const payloadString = JSON.stringify(payload);
 
-      // Use sendBeacon for reliability during page unload
-      // Create a Blob with proper Content-Type for HubSpot API
-      const blob = new Blob([payloadString], {
-        type: 'application/json',
-      });
-
-      const sent = navigator.sendBeacon(PARTIAL_FILL_CONFIG.apiEndpoint, blob);
-
-      if (sent) {
-        PARTIAL_FILL_SENT = true;
-        log('Partial fill submitted:', { email, formName, pageUrl });
-        console.log('[HubSpot Router] Partial fill sent:', {
-          email,
-          formName,
-          pageUrl,
+      // Use fetch with keepalive for reliability during page unload
+      // This avoids CORS preflight issues with sendBeacon
+      fetch(PARTIAL_FILL_CONFIG.apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: payloadString,
+        keepalive: true, // Ensures request continues even if page unloads
+      })
+        .then((response) => {
+          if (response.ok) {
+            PARTIAL_FILL_SENT = true;
+            log('Partial fill submitted:', { email, formName, pageUrl });
+            console.log('[HubSpot Router] Partial fill sent successfully:', {
+              email,
+              formName,
+              pageUrl,
+            });
+          } else {
+            console.warn(
+              '[HubSpot Router] Partial fill failed:',
+              response.status,
+              response.statusText
+            );
+          }
+        })
+        .catch((error) => {
+          console.error('[HubSpot Router] Partial fill error:', error);
         });
-      } else {
-        log('Failed to send partial fill beacon');
-        console.warn('[HubSpot Router] Failed to send partial fill beacon');
-      }
+
+      // Mark as sent immediately to prevent duplicates
+      PARTIAL_FILL_SENT = true;
     } catch (e) {
       log('Error submitting partial fill:', e);
     }
