@@ -22,6 +22,15 @@
     schedule: '/thank-you/schedule',
   };
 
+  // Partial form fill configuration for early email capture
+  const PARTIAL_FILL_CONFIG = {
+    portalId: '7507639',
+    formId: '233427c7-d504-46f3-9b75-9c798c25e5fc',
+    apiEndpoint:
+      'https://api.hsforms.com/submissions/v3/integration/submit/7507639/233427c7-d504-46f3-9b75-9c798c25e5fc',
+    fieldName: 'partial_fill_source',
+  };
+
   const MULTI_PRACTICE_FIELDS = [
     'do_you_file_taxes_as_an_independent_contractor_or_as_the_sole_owner_of_your_business_',
     'does_your_practice_have_multiple_owners',
@@ -221,6 +230,56 @@
     return resolved || null;
   }
 
+  /**
+   * Submit partial form fill to HubSpot when user abandons form
+   * Uses sendBeacon for reliability during page unload
+   */
+  function submitPartialFill(email, formName, pageUrl) {
+    if (!email || PARTIAL_FILL_SENT || HAS_ROUTED) {
+      return;
+    }
+
+    try {
+      const tagValue = `Partial: ${formName} | ${pageUrl}`;
+
+      // Get HubSpot tracking cookie for better contact matching
+      const hutk = getCookieValue('hubspotutk');
+
+      const payload = {
+        fields: [
+          { name: 'email', value: email },
+          { name: PARTIAL_FILL_CONFIG.fieldName, value: tagValue },
+        ],
+        context: {
+          pageUri: window.location.href,
+          pageName: document.title || 'Untitled Page',
+        },
+      };
+
+      // Add hutk if available for better contact matching
+      if (hutk) {
+        payload.context.hutk = hutk;
+      }
+
+      const payloadString = JSON.stringify(payload);
+
+      // Use sendBeacon for reliability during page unload
+      const sent = navigator.sendBeacon(
+        PARTIAL_FILL_CONFIG.apiEndpoint,
+        payloadString
+      );
+
+      if (sent) {
+        PARTIAL_FILL_SENT = true;
+        log('Partial fill submitted:', { email, formName, pageUrl });
+      } else {
+        log('Failed to send partial fill beacon');
+      }
+    } catch (e) {
+      log('Error submitting partial fill:', e);
+    }
+  }
+
   // Expose DEBUG flag for other scripts
   window.HubSpotRouter = window.HubSpotRouter || {};
   window.HubSpotRouter.DEBUG = DEBUG;
@@ -228,6 +287,10 @@
   // Ensure we only route once per page load
   let HAS_ROUTED = false;
   let MULTISTEP_FALLBACK_TIMER = null;
+
+  // Track partial fill submissions to prevent duplicates
+  let PARTIAL_FILL_SENT = false;
+  let DETECTED_FORM_NAME = 'Unknown Form';
 
   // Normalize HubSpot payloads and raw form objects into a flat key/value map
   function canonicalKey(key) {
@@ -643,12 +706,52 @@
       }
     }
 
+    // Try to detect form name from DOM
+    function detectFormNameFromDOM() {
+      try {
+        // Look for HubSpot form elements
+        const formElement = document.querySelector(
+          'form[data-form-id], .hbspt-form, .hs-form'
+        );
+        if (formElement) {
+          // Try to get form title from nearby heading
+          const formContainer = formElement.closest(
+            '[class*="form"], [id*="form"]'
+          );
+          if (formContainer) {
+            const heading = formContainer.querySelector('h1, h2, h3, h4');
+            if (heading && heading.textContent) {
+              const formName = heading.textContent.trim();
+              if (formName && formName.length < 100) {
+                DETECTED_FORM_NAME = formName;
+                log('Detected form name from DOM heading:', DETECTED_FORM_NAME);
+                return;
+              }
+            }
+          }
+
+          // Try to get form ID attribute
+          const formId = formElement.getAttribute('data-form-id');
+          if (formId) {
+            DETECTED_FORM_NAME = `Form ${formId}`;
+            log('Detected form ID from DOM:', DETECTED_FORM_NAME);
+            return;
+          }
+        }
+      } catch (e) {
+        log('Error detecting form name from DOM:', e);
+      }
+    }
+
     // Monitor form inputs using MutationObserver
     function monitorFormInputs() {
       const partnerstackCookieId = getPartnerstackClickId();
       if (partnerstackCookieId) {
         populatePartnerstackFields(partnerstackCookieId);
       }
+
+      // Try to detect form name from DOM
+      detectFormNameFromDOM();
 
       const observer = new MutationObserver((mutations) => {
         // Process only new nodes, not all inputs every time
@@ -925,6 +1028,27 @@
       const msgType = payload && (payload.type || payload.messageType);
       const eventName = payload && payload.eventName;
 
+      // Capture form name when form is ready
+      if (
+        payload &&
+        msgType === 'hsFormCallback' &&
+        eventName === 'onFormReady'
+      ) {
+        try {
+          // Try to get form name from payload
+          if (payload.data && payload.data.formName) {
+            DETECTED_FORM_NAME = payload.data.formName;
+            log('Detected form name from onFormReady:', DETECTED_FORM_NAME);
+          } else if (payload.id) {
+            // Fallback to form ID if name not available
+            DETECTED_FORM_NAME = `Form ${payload.id}`;
+            log('Using form ID as name:', DETECTED_FORM_NAME);
+          }
+        } catch (e) {
+          log('Error detecting form name:', e);
+        }
+      }
+
       // Check for standard form submission event
       if (
         payload &&
@@ -1038,6 +1162,47 @@
   }
 
   /**
+   * Initialize partial fill detection for early email capture
+   * Listens for page exit events and submits partial form data
+   */
+  function initPartialFillDetection() {
+    // Handler for page visibility changes (most reliable)
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        // Only submit if form was not completed and we have an email
+        if (!HAS_ROUTED && !PARTIAL_FILL_SENT) {
+          const email =
+            window._capturedFormData && window._capturedFormData.email;
+          if (email) {
+            const pageUrl = window.location.pathname;
+            submitPartialFill(email, DETECTED_FORM_NAME, pageUrl);
+            log('Partial fill triggered on visibility change');
+          }
+        }
+      }
+    }
+
+    // Handler for page hide (backup for browsers that don't support visibilitychange well)
+    function handlePageHide() {
+      if (!HAS_ROUTED && !PARTIAL_FILL_SENT) {
+        const email =
+          window._capturedFormData && window._capturedFormData.email;
+        if (email) {
+          const pageUrl = window.location.pathname;
+          submitPartialFill(email, DETECTED_FORM_NAME, pageUrl);
+          log('Partial fill triggered on page hide');
+        }
+      }
+    }
+
+    // Add event listeners
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
+
+    log('Partial fill detection initialized');
+  }
+
+  /**
    * Initialize the router with options
    */
   function init(options = {}) {
@@ -1063,6 +1228,9 @@
 
     // Initialize postMessage listener
     initPostMessageListener(config);
+
+    // Initialize partial fill detection on page exit
+    initPartialFillDetection();
 
     log('HubSpot Form Router initialized with config:', config);
   }
