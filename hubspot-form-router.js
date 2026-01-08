@@ -264,16 +264,24 @@
       const payloadString = JSON.stringify(payload);
 
       // Use sendBeacon for reliability during page unload
-      const sent = navigator.sendBeacon(
-        PARTIAL_FILL_CONFIG.apiEndpoint,
-        payloadString
-      );
+      // Create a Blob with proper Content-Type for HubSpot API
+      const blob = new Blob([payloadString], {
+        type: 'application/json',
+      });
+
+      const sent = navigator.sendBeacon(PARTIAL_FILL_CONFIG.apiEndpoint, blob);
 
       if (sent) {
         PARTIAL_FILL_SENT = true;
         log('Partial fill submitted:', { email, formName, pageUrl });
+        console.log('[HubSpot Router] Partial fill sent:', {
+          email,
+          formName,
+          pageUrl,
+        });
       } else {
         log('Failed to send partial fill beacon');
+        console.warn('[HubSpot Router] Failed to send partial fill beacon');
       }
     } catch (e) {
       log('Error submitting partial fill:', e);
@@ -1169,6 +1177,12 @@
     // Handler for page visibility changes (most reliable)
     function handleVisibilityChange() {
       if (document.visibilityState === 'hidden') {
+        console.log('[HubSpot Router] Visibility changed to hidden', {
+          HAS_ROUTED,
+          PARTIAL_FILL_SENT,
+          capturedData: window._capturedFormData,
+        });
+
         // Only submit if form was not completed and we have an email
         if (!HAS_ROUTED && !PARTIAL_FILL_SENT) {
           const email =
@@ -1177,13 +1191,29 @@
             const pageUrl = window.location.pathname;
             submitPartialFill(email, DETECTED_FORM_NAME, pageUrl);
             log('Partial fill triggered on visibility change');
+          } else {
+            console.log(
+              '[HubSpot Router] No email captured yet, skipping partial fill'
+            );
           }
+        } else {
+          console.log('[HubSpot Router] Skipping partial fill:', {
+            reason: HAS_ROUTED
+              ? 'Form already routed'
+              : 'Partial fill already sent',
+          });
         }
       }
     }
 
     // Handler for page hide (backup for browsers that don't support visibilitychange well)
     function handlePageHide() {
+      console.log('[HubSpot Router] Page hide event', {
+        HAS_ROUTED,
+        PARTIAL_FILL_SENT,
+        capturedData: window._capturedFormData,
+      });
+
       if (!HAS_ROUTED && !PARTIAL_FILL_SENT) {
         const email =
           window._capturedFormData && window._capturedFormData.email;
@@ -1200,6 +1230,7 @@
     window.addEventListener('pagehide', handlePageHide);
 
     log('Partial fill detection initialized');
+    console.log('[HubSpot Router] Partial fill detection initialized');
   }
 
   /**
@@ -1219,6 +1250,21 @@
         determineSchedulerType,
         buildSchedulerUrl,
         handleFormSubmission,
+        getCapturedData: () => window._capturedFormData,
+        getFormName: () => DETECTED_FORM_NAME,
+        testPartialFill: () => {
+          const email =
+            window._capturedFormData && window._capturedFormData.email;
+          if (email) {
+            submitPartialFill(
+              email,
+              DETECTED_FORM_NAME,
+              window.location.pathname
+            );
+            return 'Partial fill submitted';
+          }
+          return 'No email captured';
+        },
       };
       log('Debug mode enabled. Access via window.HubSpotRouterDebug');
     }
