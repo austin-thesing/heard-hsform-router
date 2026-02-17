@@ -28,19 +28,7 @@
 
   // Get form data from all storage sources
   function getStoredFormData() {
-    // Try localStorage first (for form data prefill)
-    try {
-      const localStorageData = localStorage.getItem('hubspot_form_data');
-      if (localStorageData) {
-        const formData = JSON.parse(localStorageData);
-        log('Found form data in localStorage:', formData);
-        return { formData: formData, source: 'localStorage' };
-      }
-    } catch (e) {
-      log('localStorage error:', e);
-    }
-
-    // Try sessionStorage
+    // Try sessionStorage first since it includes scheduler_type.
     try {
       const storedData = sessionStorage.getItem('scheduler_router_data');
       if (storedData) {
@@ -55,6 +43,18 @@
       }
     } catch (e) {
       log('sessionStorage error:', e);
+    }
+
+    // Fallback to localStorage for form prefill data.
+    try {
+      const localStorageData = localStorage.getItem('hubspot_form_data');
+      if (localStorageData) {
+        const formData = JSON.parse(localStorageData);
+        log('Found form data in localStorage:', formData);
+        return { formData: formData, source: 'localStorage' };
+      }
+    } catch (e) {
+      log('localStorage error:', e);
     }
 
     // Try cookies as fallback
@@ -102,6 +102,14 @@
   function resolveSchedulerType(storedData, formData) {
     if (storedData && storedData.schedulerType) {
       return storedData.schedulerType;
+    }
+
+    if (
+      storedData &&
+      storedData.formData &&
+      storedData.formData.scheduler_type
+    ) {
+      return storedData.formData.scheduler_type;
     }
 
     if (formData && formData.scheduler_type) {

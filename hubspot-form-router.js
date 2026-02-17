@@ -593,7 +593,13 @@
 
     // Also store form data in localStorage for prefill functionality
     try {
-      localStorage.setItem('hubspot_form_data', JSON.stringify(formData));
+      localStorage.setItem(
+        'hubspot_form_data',
+        JSON.stringify({
+          ...formData,
+          scheduler_type: schedulerType,
+        })
+      );
       log('Stored form data in localStorage for prefill');
     } catch (e) {
       log('Failed to store form data in localStorage:', e);
