@@ -8,11 +8,14 @@ This project provides a seamless integration between HubSpot forms and HubSpot M
 
 ## Features
 
-- **Smart Routing**: Automatically routes users to appropriate schedulers based on form responses
-- **Data Persistence**: Preserves form data across page transitions using localStorage and sessionStorage
-- **Scheduler Injection**: Dynamically embeds HubSpot Meeting schedulers with pre-filled information
-- **PartnerStack Tracking**: Automatic ps_xid parameter management for attribution tracking
-- **Debug Mode**: Built-in debugging capabilities for troubleshooting
+- **Smart Routing**: Automatically routes users to appropriate schedulers based on revenue question responses
+- **Partial Fill Detection**: Captures email addresses early and submits them to HubSpot when users leave before completing the form
+- **Multistep Form Support**: Robust fallback mechanism for multistep forms, detecting completion via DOM "Thank You" messages when standard callbacks fail
+- **Data Persistence**: Preserves form data across page transitions using localStorage, sessionStorage, and cookies
+- **Scheduler Injection**: Dynamically embeds HubSpot Meeting schedulers with pre-filled information (name, email, company, phone)
+- **PartnerStack Tracking**: Automatic ps_xid parameter management for attribution tracking, including hidden form field population
+- **Analytics Integration**: Fires conversion events to Reddit, Meta (Facebook), Google Analytics, PostHog, and Amplitude
+- **Debug Mode**: Built-in draggable debug panel for inspecting stored form data and routing decisions
 - **Fallback Support**: Graceful handling when schedulers fail to load
 
 ## Files
@@ -21,6 +24,7 @@ This project provides a seamless integration between HubSpot forms and HubSpot M
 - `hubspot-form-router.js` - Main routing logic that listens for HubSpot form submissions
 - `wf-scheduler-injection.js` - Handles scheduler injection and form data prefilling
 - `form.css` - Heard brand styling for HubSpot forms
+- `welcome-form.css` - Minor UI adjustments for radio and checkbox label weights
 - `embed.html` - Example HTML implementation
 - `test-ps-xid.html` - Test page for PartnerStack tracking functionality
 
@@ -114,6 +118,9 @@ bunx prettier --write .
 # Build for production
 bun run build
 
+# Watch mode (rebuild on changes)
+bun run watch
+
 # Test (when tests are added)
 bun test
 ```
@@ -175,9 +182,12 @@ Handles form submission routing and data capture.
 
 - Listens for HubSpot form submissions via postMessage
 - Captures form data from developer embeds
-- Routes users based on the revenue question
-- Stores form data for scheduler prefilling
-- Manages PartnerStack attribution
+- Routes users based on an exhaustive list of revenue field values
+- Stores form data (including scheduler type) for scheduler prefilling
+- Manages PartnerStack attribution and hidden `partnerstack_click_id` field population
+- **Partial fill detection**: Monitors email inputs and submits to HubSpot via `fetch` with `keepalive` when users navigate away before completing the form
+- **Multistep fallback**: Uses a timer and DOM observation to detect "Thank You" messages when standard form submission callbacks fail
+- Active input monitoring for developer-embed forms and radio selections
 
 ### 3. `wf-scheduler-injection.js`
 
@@ -185,10 +195,11 @@ Injects and configures HubSpot Meeting schedulers.
 
 **Features:**
 
-- Retrieves stored form data
-- Builds enhanced scheduler URLs with prefilled data
+- Retrieves stored form data from sessionStorage, localStorage, and cookies
+- Builds enhanced scheduler URLs with prefilled data (name, email, company, phone)
 - Handles fallback to form page if no data exists
-- Fires conversion tracking events
+- Fires conversion events to multiple platforms: Reddit, Meta (Facebook), Google Analytics, PostHog, and Amplitude
+- Includes a draggable debug panel (enabled via `?debug=true`) for inspecting stored data and routing decisions
 
 ## Changelog
 
@@ -207,3 +218,14 @@ Injects and configures HubSpot Meeting schedulers.
   - Over $100k routes to consultation scheduler
   - Under $100k or blank routes to consultations scheduler
   - Updated scheduler configuration and docs
+
+### February 2026
+
+- **Added**: Partial fill detection for early email capture
+  - Submits captured email to HubSpot via `fetch` with `keepalive` on `beforeunload`
+  - Switched from Blob to direct fetch for improved reliability
+- **Added**: Enhanced form data storage with scheduler type
+- **Improved**: Multistep form completion detection fallback via DOM "Thank You" message observation
+- **Improved**: Unified logging approach across all scripts for consistency
+- **Added**: Watch mode build script (`bun run watch`)
+- **Added**: `welcome-form.css` for radio/checkbox label styling
