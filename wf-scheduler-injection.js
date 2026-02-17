@@ -12,12 +12,17 @@
     if (DEBUG) console.log('[Webflow Scheduler]', ...args);
   }
 
-  // Configuration - force round-robin scheduler
+  // Configuration - revenue-based scheduler
   const SCHEDULER_CONFIG = {
-    sole_prop: {
+    over_100k: {
       url: 'https://meetings.hubspot.com/bz/consultation',
-      name: 'Round Robin Consultation',
-      description: 'For all practices (round-robin)',
+      name: 'Consultation Scheduler',
+      description: 'Revenue over $100k',
+    },
+    under_100k: {
+      url: 'https://meetings.hubspot.com/bz/consultations',
+      name: 'Consultations Scheduler',
+      description: 'Revenue under $100k or not provided',
     },
   };
 
@@ -94,9 +99,22 @@
     return params;
   }
 
+  function resolveSchedulerType(storedData, formData) {
+    if (storedData && storedData.schedulerType) {
+      return storedData.schedulerType;
+    }
+
+    if (formData && formData.scheduler_type) {
+      return formData.scheduler_type;
+    }
+
+    return 'under_100k';
+  }
+
   // Build enhanced scheduler URL with form data
-  function buildSchedulerUrl(formData) {
-    const config = SCHEDULER_CONFIG.sole_prop;
+  function buildSchedulerUrl(formData, schedulerType) {
+    const config =
+      SCHEDULER_CONFIG[schedulerType] || SCHEDULER_CONFIG.under_100k;
     const url = new URL(config.url);
 
     // Always add embed parameter
@@ -199,7 +217,7 @@
   }
 
   // Fire lead tracking events
-  function fireLeadEvents() {
+  function fireLeadEvents(schedulerType) {
     try {
       // Only run if we're on the live production domain
       if (window.location.hostname.includes('joinheard.com')) {
@@ -218,16 +236,16 @@
       if (typeof gtag !== 'undefined') {
         gtag('event', 'generate_lead', {
           event_category: 'engagement',
-          event_label: 'round_robin_consultation',
+          event_label: schedulerType || 'unknown',
         });
       } else if (typeof ga !== 'undefined') {
-        ga('send', 'event', 'Lead', 'Generate', 'round_robin_consultation');
+        ga('send', 'event', 'Lead', 'Generate', schedulerType || 'unknown');
       }
 
       // PostHog
       if (typeof window.posthog !== 'undefined') {
         window.posthog.capture('scheduler_lead_generated', {
-          scheduler_type: 'round_robin',
+          scheduler_type: schedulerType || 'unknown',
           source: 'webflow_complete',
         });
       }
@@ -235,7 +253,7 @@
       // Amplitude
       if (typeof window.amplitude !== 'undefined') {
         window.amplitude.track('scheduler_lead_generated', {
-          scheduler_type: 'round_robin',
+          scheduler_type: schedulerType || 'unknown',
           source: 'webflow_complete',
         });
       }
@@ -259,6 +277,8 @@
       allFormData = { ...allFormData, ...storedData.formData };
       log('Merged form data from storage:', allFormData);
     }
+
+    const schedulerType = resolveSchedulerType(storedData, allFormData);
 
     // Check if we have any meaningful form data (at least email or firstname)
     const hasFormData =
@@ -327,7 +347,7 @@
     }
 
     // Build scheduler URL with all form data
-    const schedulerUrl = buildSchedulerUrl(allFormData);
+    const schedulerUrl = buildSchedulerUrl(allFormData, schedulerType);
 
     log('Injecting scheduler into target');
     log('Final URL:', schedulerUrl);
@@ -341,7 +361,7 @@
       'https://static.hsappstatic.net/MeetingsEmbed/ex/MeetingsEmbedCode.js';
     script.onload = function () {
       log('HubSpot embed script loaded successfully');
-      fireLeadEvents();
+      fireLeadEvents(schedulerType);
     };
     script.onerror = function () {
       console.error('[Webflow Scheduler] Failed to load HubSpot embed script');
@@ -384,6 +404,8 @@
       ${urlParams.toString() || 'None'}<br><br>
       <strong>Stored Data:</strong><br>
       ${storedData ? `Source: ${storedData.source}<br>Fields: ${Object.keys(storedData.formData || {}).join(', ')}` : 'None found'}<br><br>
+      <strong>Scheduler Type:</strong><br>
+      ${resolveSchedulerType(storedData, getQueryParams())}<br><br>
       <strong>Action:</strong><br>
       ${storedData || urlParams.toString() ? '✅ Loading scheduler' : '❌ Will redirect to /free-consult'}
     `;
@@ -441,6 +463,7 @@
       buildSchedulerUrl,
       handleScheduler,
       fireLeadEvents,
+      resolveSchedulerType,
       init,
       config: SCHEDULER_CONFIG,
     };

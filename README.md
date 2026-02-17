@@ -66,12 +66,10 @@ The build process creates minified versions in the `dist/` directory.
 
 ### Routing Logic
 
-The system routes based on the "Does your practice have multiple owners?" question:
+The system routes based on the revenue question:
 
-- **"Yes" (Multiple Owners)** → Routes to consultation scheduler
-- **"No" or not answered** → Routes to success page (no scheduler)
-
-**Note**: Income-based routing has been removed. The system no longer considers annual revenue thresholds for routing decisions as of 10/22/2025.
+- **Over $100k** → `https://meetings.hubspot.com/bz/consultation`
+- **Under $100k or not answered** → `https://meetings.hubspot.com/bz/consultations`
 
 ### Debug Mode
 
@@ -87,10 +85,15 @@ Scheduler URLs and routing logic are configured in the main script:
 
 ```javascript
 const SCHEDULER_CONFIG = {
-  general: {
+  over_100k: {
     url: 'https://meetings.hubspot.com/bz/consultation',
     name: 'Consultation Scheduler',
-    description: 'General consultation scheduling',
+    description: 'Revenue over $100k',
+  },
+  under_100k: {
+    url: 'https://meetings.hubspot.com/bz/consultations',
+    name: 'Consultations Scheduler',
+    description: 'Revenue under $100k or not provided',
   },
 };
 
@@ -100,7 +103,7 @@ const ROUTE_DESTINATIONS = {
 };
 ```
 
-**Note**: The system now uses a single general scheduler configuration. Routing is determined solely by the multi-practice ownership question.
+**Note**: Routing is determined by the revenue question and defaults to the under-$100k scheduler if no response is available.
 
 ## Development
 
@@ -144,6 +147,7 @@ For issues or questions, contact the Heard development team.
 Universal cookie management and tracking script that runs on all pages.
 
 **Features:**
+
 - Captures PartnerStack tracking IDs (`ps_xid`, `ps_partner_key`) from URL parameters
 - Stores IDs in cross-domain cookies (90-day expiration) and localStorage for redundancy
 - Sanitizes input to prevent XSS attacks
@@ -157,6 +161,7 @@ Universal cookie management and tracking script that runs on all pages.
   - Ensures consistent tracking across the entire conversion funnel
 
 **Usage:**
+
 ```html
 <!-- Add to all pages, especially those with forms -->
 <script src="global-cookie.js"></script>
@@ -167,9 +172,10 @@ Universal cookie management and tracking script that runs on all pages.
 Handles form submission routing and data capture.
 
 **Features:**
+
 - Listens for HubSpot form submissions via postMessage
 - Captures form data from developer embeds
-- Routes users based on multi-practice ownership question
+- Routes users based on the revenue question
 - Stores form data for scheduler prefilling
 - Manages PartnerStack attribution
 
@@ -178,6 +184,7 @@ Handles form submission routing and data capture.
 Injects and configures HubSpot Meeting schedulers.
 
 **Features:**
+
 - Retrieves stored form data
 - Builds enhanced scheduler URLs with prefilled data
 - Handles fallback to form page if no data exists
@@ -194,10 +201,9 @@ Injects and configures HubSpot Meeting schedulers.
   - Preserves existing URL parameters
   - Added test page for verification
 
-### October 22, 2025
+### February 5, 2026
 
-- **Removed**: Income-based disqualification logic
-  - The system no longer checks annual revenue thresholds for routing decisions
-  - Routing is now based solely on the multi-practice ownership question
-  - Simplified configuration to use a single general scheduler
-  - Updated documentation to reflect the simplified routing logic
+- **Updated**: Revenue-based routing restored
+  - Over $100k routes to consultation scheduler
+  - Under $100k or blank routes to consultations scheduler
+  - Updated scheduler configuration and docs

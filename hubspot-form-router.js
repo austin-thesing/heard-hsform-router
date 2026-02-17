@@ -8,12 +8,17 @@
 (function () {
   'use strict';
 
-  // Single scheduler destination configuration
+  // Scheduler destination configuration
   const SCHEDULER_CONFIG = {
-    general: {
+    over_100k: {
       url: 'https://meetings.hubspot.com/bz/consultation',
       name: 'Consultation Scheduler',
-      description: 'General consultation scheduling',
+      description: 'Revenue over $100k',
+    },
+    under_100k: {
+      url: 'https://meetings.hubspot.com/bz/consultations',
+      name: 'Consultations Scheduler',
+      description: 'Revenue under $100k or not provided',
     },
   };
 
@@ -31,6 +36,8 @@
     fieldName: 'partial_fill_source',
   };
 
+  // Multi-practice routing is intentionally disabled; revenue only.
+  /*
   const MULTI_PRACTICE_FIELDS = [
     'do_you_file_taxes_as_an_independent_contractor_or_as_the_sole_owner_of_your_business_',
     'does_your_practice_have_multiple_owners',
@@ -38,11 +45,6 @@
 
   const YES_VALUES = ['yes', 'true', 'y', '1', 'multiple owners', 'multi'];
   const NO_VALUES = ['no', 'false', 'n', '0'];
-
-  function normalizeResponse(value) {
-    if (value == null) return '';
-    return String(value).trim().toLowerCase();
-  }
 
   function isAffirmative(value) {
     const normalized = normalizeResponse(value);
@@ -65,6 +67,88 @@
     if (NO_VALUES.includes(normalized)) return true;
 
     return normalized.startsWith('no');
+  }
+  */
+  const REVENUE_FIELDS = [
+    'annual_revenue',
+    'annual_revenue_',
+    'annual_gross_revenue',
+    'annual_income',
+    'revenue',
+    'revenue_range',
+    'gross_revenue',
+    'practice_revenue',
+    'what_is_your_annual_revenue_',
+    'what_is_your_annual_revenue',
+    'what_is_your_revenue_',
+    'what_is_your_revenue',
+    'what_is_your_practice_revenue_',
+    'what_is_your_practice_revenue',
+  ];
+
+  const OVER_100K_REVENUE_VALUES = [
+    'more than $100,000',
+    'more than $100000',
+    '$100,000+',
+    '$100000+',
+  ];
+
+  const KNOWN_REVENUE_OPTION_VALUES = [
+    'none',
+    'less than $25,000',
+    'less than $25000',
+    '$25,000 - $49,999',
+    '$25,000-$49,999',
+    '$25000 - $49999',
+    '$25000-$49999',
+    '$50,000 - $99,999',
+    '$50,000-$99,999',
+    '$50000 - $99999',
+    '$50000-$99999',
+    ...OVER_100K_REVENUE_VALUES,
+  ];
+
+  function normalizeResponse(value) {
+    if (value == null) return '';
+    return String(value).trim().toLowerCase();
+  }
+
+  function findRevenueValue(formData) {
+    // Prefer matching by known radio labels/values so routing survives field renames.
+    if (formData && typeof formData === 'object') {
+      for (const value of Object.values(formData)) {
+        const normalizedValue = normalizeResponse(value);
+        if (KNOWN_REVENUE_OPTION_VALUES.includes(normalizedValue)) {
+          return value;
+        }
+      }
+    }
+
+    const directValue = findFirstValue(formData, REVENUE_FIELDS);
+    if (directValue) return directValue;
+
+    if (!formData || typeof formData !== 'object') {
+      return null;
+    }
+
+    const revenueKey = Object.keys(formData).find((key) => {
+      const normalizedKey = normalizeResponse(key);
+      return (
+        normalizedKey.includes('revenue') ||
+        normalizedKey.includes('income') ||
+        normalizedKey.includes('gross')
+      );
+    });
+
+    return revenueKey ? formData[revenueKey] : null;
+  }
+
+  function isOver100kSelection(rawValue) {
+    const normalized = normalizeResponse(rawValue);
+    if (!normalized) return false;
+
+    // Route to the high-revenue scheduler only on known labels/values.
+    return OVER_100K_REVENUE_VALUES.includes(normalized);
   }
 
   function findFirstValue(formData, fieldNames) {
@@ -283,11 +367,7 @@
               pageUrl,
             });
           } else {
-            log(
-              'Partial fill failed:',
-              response.status,
-              response.statusText
-            );
+            log('Partial fill failed:', response.status, response.statusText);
           }
         })
         .catch((error) => {
@@ -402,45 +482,27 @@
   }
 
   /**
-   * Determine scheduler type based on form data
-   * All users are routed to scheduler - no disqualification
-   * To re-enable disqualification based on multi-practice question, uncomment the block below
+   * Determine scheduler type based on revenue response
+   * Over $100k -> consultation, under/blank -> consultations
    */
   function determineSchedulerType(formData) {
-    // All users go to scheduler - no disqualification
-    // To re-enable disqualification, uncomment the block below:
-    /*
-    // Check multi-practice questions
-    const multiPracticeResponse = findFirstValue(
-      formData,
-      MULTI_PRACTICE_FIELDS
-    );
-    const hasMultiPracticeYes =
-      multiPracticeResponse && isAffirmative(multiPracticeResponse);
+    const revenueResponse = findRevenueValue(formData);
+    const over100k = revenueResponse && isOver100kSelection(revenueResponse);
 
-    // Route to success if multi-practice question is answered "no" or not answered
-    if (!hasMultiPracticeYes) {
-      log('Multi-practice question not answered yes, routing to success page', {
-        field: MULTI_PRACTICE_FIELDS.find((field) => formData[field]),
-        value: multiPracticeResponse,
-        hasYes: hasMultiPracticeYes,
-      });
-      return 'success';
-    }
-
-    // Route to scheduler if multi-practice question is answered "yes"
-    log('Multi-practice question answered yes, routing to scheduler', {
-      multiPracticeValue: multiPracticeResponse,
+    log('Revenue routing decision', {
+      revenueValue: revenueResponse,
+      over100k,
     });
-    */
-    return 'general';
+
+    return over100k ? 'over_100k' : 'under_100k';
   }
 
   /**
    * Build scheduler URL with pre-filled data
    */
   function buildSchedulerUrl(schedulerType, formData) {
-    const config = SCHEDULER_CONFIG[schedulerType] || SCHEDULER_CONFIG.general;
+    const config =
+      SCHEDULER_CONFIG[schedulerType] || SCHEDULER_CONFIG.under_100k;
     const url = new URL(config.url);
 
     // Always add embed parameter
@@ -909,7 +971,7 @@
   function hasRoutingData(formData) {
     if (!formData) return false;
 
-    const hasMultiPractice = !!findFirstValue(formData, MULTI_PRACTICE_FIELDS);
+    const hasRevenueResponse = !!findRevenueValue(formData);
 
     const hasBasicIdentity = Boolean(
       formData.email ||
@@ -921,7 +983,7 @@
         formData.practice_name
     );
 
-    return hasBasicIdentity || hasMultiPractice;
+    return hasBasicIdentity || hasRevenueResponse;
   }
 
   /**
@@ -992,9 +1054,7 @@
               log('Executing redirect via fallback');
               handleFormSubmission(window._capturedFormData);
             } else {
-              log(
-                'Thank you found but no routing data available'
-              );
+              log('Thank you found but no routing data available');
             }
             return;
           }
